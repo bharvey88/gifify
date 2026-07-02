@@ -1,5 +1,7 @@
 # 🎞️ gifify
 
+[![CI](https://github.com/bharvey88/gifify/actions/workflows/ci.yml/badge.svg)](https://github.com/bharvey88/gifify/actions/workflows/ci.yml)
+
 A local web app that turns screen recordings into **animated WebP**, **GIF**, or
 **tiny MP4** clips — built for documentation wikis, READMEs, and anywhere you
 need a short demo that loads fast.
