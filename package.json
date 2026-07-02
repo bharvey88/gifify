@@ -1,0 +1,28 @@
+{
+  "name": "gifify",
+  "version": "0.1.0",
+  "description": "Local web app for turning screen recordings into animated WebP, GIF, and tiny MP4 clips",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "postinstall": "vite build",
+    "start": "node server/index.js",
+    "dev": "concurrently -n web,api -c cyan,magenta \"vite\" \"node --watch server/index.js\"",
+    "build": "vite build",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^2.0.1"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.1.0",
+    "concurrently": "^8.2.2",
+    "svelte": "^4.2.19",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
