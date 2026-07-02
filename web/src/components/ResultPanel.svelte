@@ -13,8 +13,16 @@
 <div class="panel result">
   {#if card.status === 'converting' || card.status === 'queued'}
     <div class="progress">
-      <div>Converting… <span class="mono">{card.pct}%</span></div>
-      <div class="bar"><div class="fill" style="width: {card.pct}%" /></div>
+      {#if card.status === 'queued'}
+        <div>Waiting in queue…</div>
+        <div class="bar"><div class="fill indeterminate" /></div>
+      {:else if card.stage === 'palette'}
+        <div>Analyzing colors for the GIF palette…</div>
+        <div class="bar"><div class="fill indeterminate" /></div>
+      {:else}
+        <div>Converting… <span class="mono">{card.pct}%</span></div>
+        <div class="bar"><div class="fill" style="width: {card.pct}%" /></div>
+      {/if}
     </div>
   {:else if card.status === 'failed' && card.error}
     <details class="error" open>
@@ -96,6 +104,14 @@
     margin-top: 6px;
   }
   .progress .fill { height: 100%; background: var(--accent); transition: width 0.2s; }
+  .progress .fill.indeterminate {
+    width: 30%;
+    animation: slide 1.2s ease-in-out infinite alternate;
+  }
+  @keyframes slide {
+    from { margin-left: 0; }
+    to { margin-left: 70%; }
+  }
   .error { color: var(--danger); }
   .error pre {
     white-space: pre-wrap;

@@ -45,8 +45,9 @@ function scaleFilter(settings) {
   return `fps=${fps},scale=${width}:-1:flags=lanczos`;
 }
 
-// Returns an array of {args} passes. webp/mp4 have one pass; gif has two
-// (palettegen, then paletteuse).
+// Returns an array of {kind, args} passes. webp/mp4 have one 'encode' pass;
+// gif has two: 'palette' (palettegen — emits no usable progress, since its
+// only output is a single palette image) then 'encode' (paletteuse).
 export function buildPasses(settings, inputPath, outputPath, palettePath) {
   const { format } = settings;
   const { seek, len } = trimArgs(settings);
@@ -56,6 +57,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
     const quality = numberOr(settings.quality, DEFAULTS.webp.quality);
     return [
       {
+        kind: 'encode',
         args: [
           ...COMMON, ...seek, '-i', inputPath, ...len,
           '-vf', vf,
@@ -71,6 +73,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
     const bayerScale = numberOr(settings.bayerScale, DEFAULTS.gif.bayerScale);
     return [
       {
+        kind: 'palette',
         args: [
           ...COMMON, ...seek, '-i', inputPath, ...len,
           '-vf', `${vf},palettegen=stats_mode=diff`,
@@ -78,6 +81,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
         ],
       },
       {
+        kind: 'encode',
         args: [
           ...COMMON, ...seek, '-i', inputPath, '-i', palettePath, ...len,
           '-lavfi', `${vf}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=${bayerScale}:diff_mode=rectangle`,
@@ -91,6 +95,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
     const crf = numberOr(settings.crf, DEFAULTS.mp4.crf);
     return [
       {
+        kind: 'encode',
         args: [
           ...COMMON, ...seek, '-i', inputPath, ...len,
           '-vf', `${vf},format=yuv420p`,

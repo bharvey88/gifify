@@ -95,7 +95,7 @@
       patchCard(card.id, { currentJobId: jobId });
       api.watchJob(jobId, (evt) => {
         if (evt.status === 'running') {
-          patchCard(card.id, { status: 'converting', pct: evt.pct ?? 0 });
+          patchCard(card.id, { status: 'converting', stage: evt.stage ?? 'encode', pct: evt.pct ?? 0 });
         } else if (evt.status === 'done') {
           const current = cards.find((c) => c.id === card.id);
           const attempt = {

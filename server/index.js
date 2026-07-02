@@ -114,6 +114,7 @@ app.post('/api/convert', (req, res) => {
     videoId: video.id,
     settings: jobSettings,
     status: 'queued',
+    stage: null,
     pct: 0,
     error: null,
     outPath: null,
@@ -133,8 +134,7 @@ function emit(job, payload) {
 }
 
 async function runJob(job, video) {
-  job.status = 'running';
-  emit(job, { status: 'running', pct: 0 });
+  job.status = 'running'; // each pass emits its own stage event below
 
   const base = path.parse(video.name).name;
   const ext = job.settings.format;
@@ -142,17 +142,23 @@ async function runJob(job, video) {
   const palettePath = path.join(video.dir, `palette_${job.id}.png`);
   const clipLen = clipLengthSec(job.settings, video.durationSec);
   const passes = buildPasses(job.settings, video.filePath, attemptPath, palettePath);
-  // GIF pass 1 (palette) is quick relative to pass 2; weight it 40/60.
-  const weights = passes.length === 2 ? [[0, 40], [40, 100]] : [[0, 100]];
 
   try {
-    for (let i = 0; i < passes.length; i++) {
-      const [from, to] = weights[i];
-      await runPass(passes[i].args, (sec) => {
+    for (const pass of passes) {
+      // palettegen's only output is a single palette image, so it emits no
+      // usable out_time — report that pass as indeterminate ('palette' stage)
+      // and map the real encode pass to 0-100%.
+      job.stage = pass.kind;
+      if (pass.kind === 'palette') {
+        emit(job, { status: 'running', stage: 'palette' });
+        await runPass(pass.args, null);
+        continue;
+      }
+      emit(job, { status: 'running', stage: 'encode', pct: job.pct });
+      await runPass(pass.args, (sec) => {
         if (!clipLen) return;
-        const pct = Math.min(from + ((sec / clipLen) * (to - from)), to);
-        job.pct = Math.round(pct);
-        emit(job, { status: 'running', pct: job.pct });
+        job.pct = Math.round(Math.min((sec / clipLen) * 100, 100));
+        emit(job, { status: 'running', stage: 'encode', pct: job.pct });
       });
     }
 
@@ -202,6 +208,12 @@ app.get('/api/jobs/:id/events', (req, res) => {
   if (job.status === 'failed') {
     res.write(`data: ${JSON.stringify({ status: 'failed', error: job.error })}\n\n`);
     return res.end();
+  }
+
+  // Send the current state immediately — stage events are emitted once per
+  // pass and would otherwise be missed if the client connects mid-pass.
+  if (job.status === 'running') {
+    res.write(`data: ${JSON.stringify({ status: 'running', stage: job.stage, pct: job.pct })}\n\n`);
   }
 
   job.listeners.add(res);

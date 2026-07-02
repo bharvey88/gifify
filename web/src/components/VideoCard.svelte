@@ -30,12 +30,13 @@
     <div class="status muted">
       {#if card.status === 'uploading'}uploading…
       {:else if card.status === 'queued'}queued
-      {:else if card.status === 'converting'}converting {card.pct}%
+      {:else if card.status === 'converting'}
+        {card.stage === 'palette' ? 'analyzing colors…' : `converting ${card.pct}%`}
       {:else if card.status === 'done'}done · {formatBytes(latest?.bytes)}
       {:else if card.status === 'failed'}<span class="err">failed</span>
       {:else}{formatTime(card.durationSec)}{/if}
     </div>
-    {#if card.status === 'converting'}
+    {#if card.status === 'converting' && card.stage !== 'palette'}
       <div class="bar"><div class="fill" style="width: {card.pct}%" /></div>
     {/if}
   </div>

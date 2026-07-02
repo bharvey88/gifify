@@ -60,6 +60,15 @@ describe('buildPasses', () => {
     expect(args[t + 1]).toBe('16'); // clip length = end - start
   });
 
+  it('tags passes so the UI can show indeterminate progress during palettegen', () => {
+    const gif = buildPasses(normalizeSettings({ format: 'gif' }), IN, 'C:/tmp/out.gif', PALETTE);
+    expect(gif.map((p) => p.kind)).toEqual(['palette', 'encode']);
+    const webp = buildPasses(normalizeSettings({ format: 'webp' }), IN, OUT, PALETTE);
+    expect(webp.map((p) => p.kind)).toEqual(['encode']);
+    const mp4 = buildPasses(normalizeSettings({ format: 'mp4' }), IN, 'C:/tmp/out.mp4', PALETTE);
+    expect(mp4.map((p) => p.kind)).toEqual(['encode']);
+  });
+
   it('builds two gif passes with trim applied to both', () => {
     const s = normalizeSettings({ format: 'gif', startSec: 2, endSec: 10 });
     const passes = buildPasses(s, IN, 'C:/tmp/out.gif', PALETTE);
