@@ -58,6 +58,14 @@
           on:input={(e) => set('width', Number(e.target.value))} />
       </label>
       <label>
+        Speed <span class="mono">{s.speed ?? 1}×</span>
+        <div class="seg">
+          {#each [1, 1.25, 1.5, 2, 3] as v}
+            <button class:primary={(s.speed ?? 1) === v} on:click={() => set('speed', v)}>{v}×</button>
+          {/each}
+        </div>
+      </label>
+      <label>
         FPS <span class="mono">{s.fps}</span>
         <input type="range" min="5" max="60" step="1" value={s.fps}
           on:input={(e) => set('fps', Number(e.target.value))} />

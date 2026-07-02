@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { streamUrl } from '../lib/api.js';
   import { formatTime, fracToTime, moveStart, moveEnd, clipLength, clamp } from '../lib/trim.js';
+  import { videoDisplayRect, displayToSource, sourceToDisplay, cornersToBox, moveBox } from '../lib/crop.js';
 
   export let card;
 
@@ -9,10 +10,16 @@
 
   let videoEl;
   let track;
+  let wrap;
+  let wrapW = 0;
+  let wrapH = 0;
   let currentTime = 0;
   let duration = 0;
   let looping = false;
   let dragging = null; // 'start' | 'end' | 'seek'
+  let cropMode = false;
+  let cropDrag = null; // {type:'draw', ax, ay} | {type:'move', sx, sy, orig}
+  let draftCrop = null;
 
   $: duration = card.durationSec || duration || 0;
   $: start = card.startSec ?? 0;
@@ -21,11 +28,25 @@
   $: endPct = duration ? (end / duration) * 100 : 100;
   $: playPct = duration ? (currentTime / duration) * 100 : 0;
 
+  $: srcW = card.width || videoEl?.videoWidth || 0;
+  $: srcH = card.height || videoEl?.videoHeight || 0;
+  $: rect = videoDisplayRect(wrapW, wrapH, srcW, srcH);
+  $: activeCrop = draftCrop ?? card.crop ?? null;
+  $: cropStyle = activeCrop ? boxStyle(activeCrop, rect) : '';
+
+  function boxStyle(box, r) {
+    const tl = sourceToDisplay(box.x, box.y, r);
+    return `left:${tl.px}px; top:${tl.py}px; width:${box.width * r.scale}px; height:${box.height * r.scale}px;`;
+  }
+
   // When switching cards, reset transient player state.
   let lastCardId = null;
   $: if (card.id !== lastCardId) {
     lastCardId = card.id;
     looping = false;
+    cropMode = false;
+    cropDrag = null;
+    draftCrop = null;
     currentTime = 0;
   }
 
@@ -37,9 +58,11 @@
     return Math.round(v * 10) / 10;
   }
 
+  // --- trim scrubber ---
+
   function trackFrac(e) {
-    const rect = track.getBoundingClientRect();
-    return clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    const r = track.getBoundingClientRect();
+    return clamp((e.clientX - r.left) / r.width, 0, 1);
   }
 
   function onPointerDown(which) {
@@ -57,6 +80,7 @@
   }
 
   function onPointerMove(e) {
+    if (cropDrag) return onCropMove(e);
     if (!dragging || !duration) return;
     const t = fracToTime(trackFrac(e), duration);
     if (dragging === 'start') setTrim(moveStart(t, end, duration), end);
@@ -66,7 +90,47 @@
 
   function onPointerUp() {
     dragging = null;
+    if (cropDrag) {
+      if (draftCrop) dispatch('crop', { crop: draftCrop });
+      cropDrag = null;
+      draftCrop = null;
+    }
   }
+
+  // --- crop overlay ---
+
+  function overlayPoint(e) {
+    const r = wrap.getBoundingClientRect();
+    return displayToSource(e.clientX - r.left, e.clientY - r.top, rect);
+  }
+
+  function onOverlayDown(e) {
+    e.preventDefault();
+    const p = overlayPoint(e);
+    const box = card.crop;
+    if (box && p.x >= box.x && p.x <= box.x + box.width && p.y >= box.y && p.y <= box.y + box.height) {
+      cropDrag = { type: 'move', sx: p.x, sy: p.y, orig: box };
+    } else {
+      cropDrag = { type: 'draw', ax: clamp(p.x, 0, srcW), ay: clamp(p.y, 0, srcH) };
+      draftCrop = null;
+    }
+  }
+
+  function onCropMove(e) {
+    const p = overlayPoint(e);
+    if (cropDrag.type === 'draw') {
+      draftCrop = cornersToBox(cropDrag.ax, cropDrag.ay, p.x, p.y, srcW, srcH);
+    } else {
+      draftCrop = moveBox(cropDrag.orig, p.x - cropDrag.sx, p.y - cropDrag.sy, srcW, srcH);
+    }
+  }
+
+  function clearCrop() {
+    dispatch('crop', { crop: null });
+    draftCrop = null;
+  }
+
+  // --- playback ---
 
   function onTimeUpdate() {
     currentTime = videoEl?.currentTime ?? 0;
@@ -103,15 +167,38 @@
 <svelte:window on:pointermove={onPointerMove} on:pointerup={onPointerUp} />
 
 <div class="panel editor">
-  <!-- svelte-ignore a11y-media-has-caption -->
-  <video
-    bind:this={videoEl}
-    src={streamUrl(card.id)}
-    controls
-    playsinline
-    on:timeupdate={onTimeUpdate}
-    on:loadedmetadata={() => { if (!card.durationSec) duration = videoEl.duration; }}
-  />
+  <div
+    class="video-wrap"
+    bind:this={wrap}
+    bind:clientWidth={wrapW}
+    bind:clientHeight={wrapH}
+  >
+    <!-- svelte-ignore a11y-media-has-caption -->
+    <video
+      bind:this={videoEl}
+      src={streamUrl(card.id)}
+      controls={!cropMode}
+      playsinline
+      on:timeupdate={onTimeUpdate}
+      on:loadedmetadata={() => { if (!card.durationSec) duration = videoEl.duration; }}
+    />
+    {#if cropMode}
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="crop-overlay" on:pointerdown={onOverlayDown}>
+        {#if activeCrop}
+          <div class="crop-box" style={cropStyle}>
+            <span class="crop-dims">{activeCrop.width}×{activeCrop.height}</span>
+          </div>
+        {:else}
+          <div class="crop-hint">Drag to draw a crop box</div>
+        {/if}
+      </div>
+    {:else if card.crop}
+      <div class="crop-overlay passive">
+        <div class="crop-box" style={boxStyle(card.crop, rect)} />
+      </div>
+    {/if}
+  </div>
 
   <div
     class="track"
@@ -147,20 +234,63 @@
       Clip end → <span class="mono">{formatTime(currentTime)}</span> ⇥
     </button>
     <button on:click={previewClip} class:active={looping}>{looping ? '◼ Stop loop' : '↻ Loop clip'}</button>
+    <button on:click={() => (cropMode = !cropMode)} class:active={cropMode} title="Crop the video frame">
+      {cropMode ? '✓ Done cropping' : '⛶ Crop'}
+    </button>
+    {#if card.crop}
+      <button on:click={clearCrop}>Clear crop ({card.crop.width}×{card.crop.height})</button>
+    {/if}
     <button on:click={resetTrim} disabled={start === 0 && end >= duration - 0.05}>Reset</button>
   </div>
   <div class="muted hint">
     Trim by dragging the blue handles, or pause the video where you want the clip to begin/end and use the buttons above.
+    {#if cropMode}Drag on the video to draw a crop box; drag inside the box to move it.{/if}
   </div>
 </div>
 
 <style>
   .editor { display: flex; flex-direction: column; gap: 10px; }
+  .video-wrap { position: relative; }
   video {
     width: 100%;
     max-height: 420px;
     background: #000;
     border-radius: 8px;
+    display: block;
+  }
+  .crop-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: crosshair;
+    touch-action: none;
+    overflow: hidden; /* contain the crop-box's dimming box-shadow */
+    border-radius: 8px;
+  }
+  .crop-overlay.passive { pointer-events: none; }
+  .crop-box {
+    position: absolute;
+    border: 2px solid var(--accent-2);
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+    cursor: move;
+  }
+  .crop-dims {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 0.75rem;
+    color: var(--accent-2);
+    text-shadow: 0 0 4px #000;
+  }
+  .crop-hint {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    pointer-events: none;
   }
   .track {
     position: relative;

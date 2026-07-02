@@ -8,6 +8,28 @@
   $: latest = attempts[0];
   let shownJobId = null;
   $: shown = attempts.find((a) => a.jobId === shownJobId) ?? latest;
+
+  let copied = '';
+  let copyTimer;
+
+  $: base = card.name.replace(/\.[^.]+$/, '');
+  $: fileName = `${base}.${shown?.format ?? 'webp'}`;
+
+  function snippet(kind) {
+    if (shown.format === 'mp4' || kind === 'html') {
+      return shown.format === 'mp4'
+        ? `<video src="${fileName}" autoplay loop muted playsinline></video>`
+        : `<img src="${fileName}" alt="${base}">`;
+    }
+    return `![${base}](${fileName})`;
+  }
+
+  async function copy(kind) {
+    await navigator.clipboard.writeText(snippet(kind));
+    copied = kind;
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => (copied = ''), 1500);
+  }
 </script>
 
 <div class="panel result">
@@ -44,6 +66,14 @@
       <span class="size mono">{formatBytes(shown.bytes)}</span>
       <span class="muted">{shown.summary}</span>
       <div class="spacer" />
+      {#if shown.format !== 'mp4'}
+        <button on:click={() => copy('md')} title={snippet('md')}>
+          {copied === 'md' ? '✓ Copied' : '📋 Markdown'}
+        </button>
+      {/if}
+      <button on:click={() => copy('html')} title={snippet('html')}>
+        {copied === 'html' ? '✓ Copied' : '📋 HTML'}
+      </button>
       <a class="btn" href={downloadUrl(shown.jobId)}>⬇ Download</a>
     </div>
     {#if shown.saveError}

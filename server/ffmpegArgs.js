@@ -27,7 +27,8 @@ function trimArgs(settings) {
   return { seek, len };
 }
 
-// Effective clip length in seconds, for progress percentage.
+// Effective OUTPUT clip length in seconds, for progress percentage.
+// Speeding up the video shrinks the output timeline.
 export function clipLengthSec(settings, videoDurationSec) {
   const start = Number(settings.startSec) || 0;
   const end =
@@ -35,14 +36,25 @@ export function clipLengthSec(settings, videoDurationSec) {
       ? Number(settings.endSec)
       : videoDurationSec;
   if (!Number.isFinite(end)) return null;
-  return Math.max(end - start, 0.01);
+  const speed = numberOr(settings.speed, 1);
+  return Math.max((end - start) / speed, 0.01);
 }
 
 function scaleFilter(settings) {
   const format = settings.format;
   const width = Number(settings.width) || DEFAULTS[format].width;
   const fps = Number(settings.fps) || DEFAULTS[format].fps;
-  return `fps=${fps},scale=${width}:-1:flags=lanczos`;
+  const parts = [];
+  if (settings.crop) {
+    const c = settings.crop;
+    parts.push(`crop=${c.width}:${c.height}:${c.x}:${c.y}`);
+  }
+  const speed = numberOr(settings.speed, 1);
+  if (speed !== 1) parts.push(`setpts=PTS/${speed}`);
+  // x264 + yuv420p requires even dimensions, so mp4 gets -2 (round height to even)
+  const h = format === 'mp4' ? -2 : -1;
+  parts.push(`fps=${fps}`, `scale=${width}:${h}:flags=lanczos`);
+  return parts.join(',');
 }
 
 // Returns an array of {kind, args} passes. webp/mp4 have one 'encode' pass;
@@ -59,7 +71,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
       {
         kind: 'encode',
         args: [
-          ...COMMON, ...seek, '-i', inputPath, ...len,
+          ...COMMON, ...seek, ...len, '-i', inputPath,
           '-vf', vf,
           '-loop', '0', '-an', '-vsync', '0',
           '-c:v', 'libwebp', '-lossless', '0', '-q:v', String(quality), '-compression_level', '6',
@@ -75,7 +87,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
       {
         kind: 'palette',
         args: [
-          ...COMMON, ...seek, '-i', inputPath, ...len,
+          ...COMMON, ...seek, ...len, '-i', inputPath,
           '-vf', `${vf},palettegen=stats_mode=diff`,
           palettePath,
         ],
@@ -83,7 +95,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
       {
         kind: 'encode',
         args: [
-          ...COMMON, ...seek, '-i', inputPath, '-i', palettePath, ...len,
+          ...COMMON, ...seek, ...len, '-i', inputPath, '-i', palettePath,
           '-lavfi', `${vf}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=${bayerScale}:diff_mode=rectangle`,
           outputPath,
         ],
@@ -97,7 +109,7 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
       {
         kind: 'encode',
         args: [
-          ...COMMON, ...seek, '-i', inputPath, ...len,
+          ...COMMON, ...seek, ...len, '-i', inputPath,
           '-vf', `${vf},format=yuv420p`,
           '-an', '-c:v', 'libx264', '-preset', 'slow', '-crf', String(crf), '-movflags', '+faststart',
           outputPath,
@@ -122,10 +134,31 @@ export function normalizeSettings(raw) {
     endSec: raw.endSec != null && Number.isFinite(Number(raw.endSec)) ? Number(raw.endSec) : null,
   };
   if (s.endSec != null && s.endSec <= s.startSec) throw new Error('endSec must be after startSec');
+  s.speed = clampSpeed(raw.speed);
+  s.crop = normalizeCrop(raw.crop);
   if (format === 'webp') s.quality = clampInt(raw.quality, 0, 100, d.quality);
   if (format === 'gif') s.bayerScale = clampInt(raw.bayerScale, 0, 5, d.bayerScale);
   if (format === 'mp4') s.crf = clampInt(raw.crf, 0, 51, d.crf);
   return s;
+}
+
+function clampSpeed(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  return Math.min(Math.max(n, 0.25), 4);
+}
+
+// Crop box in source pixels. Returns null (no crop) for missing or
+// unusable boxes rather than failing the whole conversion.
+function normalizeCrop(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const x = Math.round(Number(raw.x));
+  const y = Math.round(Number(raw.y));
+  const width = Math.round(Number(raw.width));
+  const height = Math.round(Number(raw.height));
+  if (![x, y, width, height].every(Number.isFinite)) return null;
+  if (x < 0 || y < 0 || width < 16 || height < 16) return null;
+  return { x, y, width, height };
 }
 
 function numberOr(value, fallback) {

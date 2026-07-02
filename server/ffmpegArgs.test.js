@@ -47,7 +47,10 @@ describe('buildPasses', () => {
     expect(args).not.toContain('-t');
   });
 
-  it('puts -ss before -i and -t after for trims', () => {
+  it('puts both -ss and -t before -i (input options) for trims', () => {
+    // -t after -i limits the OUTPUT timeline, which breaks once setpts
+    // (speed) compresses timestamps: 2x speed would pull in twice the
+    // requested source range. As input options they bound the source read.
     const s = normalizeSettings({ format: 'webp', startSec: 3, endSec: 19 });
     const args = buildPasses(s, IN, OUT, PALETTE)[0].args;
     const ss = args.indexOf('-ss');
@@ -55,9 +58,10 @@ describe('buildPasses', () => {
     const t = args.indexOf('-t');
     expect(ss).toBeGreaterThan(-1);
     expect(ss).toBeLessThan(i);
-    expect(t).toBeGreaterThan(i);
+    expect(t).toBeGreaterThan(-1);
+    expect(t).toBeLessThan(i);
     expect(args[ss + 1]).toBe('3');
-    expect(args[t + 1]).toBe('16'); // clip length = end - start
+    expect(args[t + 1]).toBe('16'); // clip length = end - start (input timeline)
   });
 
   it('tags passes so the UI can show indeterminate progress during palettegen', () => {
@@ -80,6 +84,7 @@ describe('buildPasses', () => {
     for (const args of [p1, p2]) {
       expect(args[args.indexOf('-ss') + 1]).toBe('2');
       expect(args[args.indexOf('-t') + 1]).toBe('8');
+      expect(args.indexOf('-t')).toBeLessThan(args.indexOf('-i')); // input option
     }
     // pass 2 uses the palette as a second input
     expect(p2.filter((a) => a === '-i')).toHaveLength(2);
@@ -89,8 +94,72 @@ describe('buildPasses', () => {
     const s = normalizeSettings({ format: 'mp4', crf: 24 });
     const args = buildPasses(s, IN, 'C:/tmp/out.mp4', PALETTE)[0].args;
     expect(args.join(' ')).toContain('format=yuv420p');
+    // x264 + yuv420p requires even dimensions; -2 keeps the height even
+    // (odd heights are easy to hit once cropping is involved)
+    expect(args.join(' ')).toContain('scale=720:-2:flags=lanczos');
     expect(args.join(' ')).toContain('-c:v libx264 -preset slow -crf 24 -movflags +faststart');
     expect(args).toContain('-an');
+  });
+});
+
+describe('speed control', () => {
+  it('defaults to 1x and adds no setpts filter', () => {
+    const s = normalizeSettings({ format: 'webp' });
+    expect(s.speed).toBe(1);
+    const args = buildPasses(s, IN, OUT, PALETTE)[0].args;
+    expect(args.join(' ')).not.toContain('setpts');
+  });
+
+  it('inserts setpts before fps so output framerate stays correct', () => {
+    const s = normalizeSettings({ format: 'webp', speed: 2 });
+    const args = buildPasses(s, IN, OUT, PALETTE)[0].args;
+    const vf = args[args.indexOf('-vf') + 1];
+    expect(vf).toBe('setpts=PTS/2,fps=24,scale=720:-1:flags=lanczos');
+  });
+
+  it('applies speed to both gif passes', () => {
+    const s = normalizeSettings({ format: 'gif', speed: 1.5 });
+    const passes = buildPasses(s, IN, 'C:/tmp/out.gif', PALETTE);
+    for (const p of passes) {
+      expect(p.args.join(' ')).toContain('setpts=PTS/1.5,fps=15');
+    }
+  });
+
+  it('clamps speed to a sane range', () => {
+    expect(normalizeSettings({ format: 'webp', speed: 100 }).speed).toBe(4);
+    expect(normalizeSettings({ format: 'webp', speed: 0 }).speed).toBe(1);
+    expect(normalizeSettings({ format: 'webp', speed: 0.1 }).speed).toBe(0.25);
+  });
+
+  it('shortens the effective clip length for progress math', () => {
+    expect(clipLengthSec({ startSec: 0, endSec: 20, speed: 2 }, 60)).toBe(10);
+    expect(clipLengthSec({ startSec: 0, endSec: null, speed: 2 }, 60)).toBe(30);
+  });
+});
+
+describe('crop', () => {
+  it('accepts a valid crop box and puts crop first in the filter chain', () => {
+    const s = normalizeSettings({ format: 'webp', crop: { x: 10, y: 20, width: 640, height: 360 } });
+    expect(s.crop).toEqual({ x: 10, y: 20, width: 640, height: 360 });
+    const args = buildPasses(s, IN, OUT, PALETTE)[0].args;
+    const vf = args[args.indexOf('-vf') + 1];
+    expect(vf).toBe('crop=640:360:10:20,fps=24,scale=720:-1:flags=lanczos');
+  });
+
+  it('rounds crop values to integers and rejects tiny or negative boxes', () => {
+    const s = normalizeSettings({ format: 'webp', crop: { x: 1.6, y: 2.4, width: 640.7, height: 360.2 } });
+    expect(s.crop).toEqual({ x: 2, y: 2, width: 641, height: 360 });
+    expect(normalizeSettings({ format: 'webp', crop: { x: 0, y: 0, width: 5, height: 5 } }).crop).toBeNull();
+    expect(normalizeSettings({ format: 'webp', crop: { x: -5, y: 0, width: 100, height: 100 } }).crop).toBeNull();
+    expect(normalizeSettings({ format: 'webp' }).crop).toBeNull();
+  });
+
+  it('combines crop and speed in the right order', () => {
+    const s = normalizeSettings({
+      format: 'gif', speed: 2, crop: { x: 0, y: 0, width: 800, height: 600 },
+    });
+    const vf = buildPasses(s, IN, 'C:/tmp/out.gif', PALETTE)[0].args;
+    expect(vf[vf.indexOf('-vf') + 1]).toBe('crop=800:600:0:0,setpts=PTS/2,fps=15,scale=720:-1:flags=lanczos,palettegen=stats_mode=diff');
   });
 });
 

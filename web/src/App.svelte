@@ -31,7 +31,7 @@
   });
 
   function defaultSettings() {
-    return { format: 'webp', fps: 24, width: 720, quality: 75, bayerScale: 5, crf: 28 };
+    return { format: 'webp', fps: 24, width: 720, quality: 75, bayerScale: 5, crf: 28, speed: 1 };
   }
 
   async function addFiles(files) {
@@ -91,6 +91,7 @@
         ...card.settings,
         startSec: card.startSec,
         endSec: card.endSec,
+        crop: card.crop ?? null,
       });
       patchCard(card.id, { currentJobId: jobId });
       api.watchJob(jobId, (evt) => {
@@ -102,7 +103,7 @@
             jobId,
             bytes: evt.bytes,
             format: card.settings.format,
-            summary: summarize(card.settings),
+            summary: summarize(card.settings, card.crop),
             outPath: evt.outPath,
             saveError: evt.saveError || null,
           };
@@ -120,9 +121,13 @@
     }
   }
 
-  function summarize(s) {
+  function summarize(s, crop) {
     const q = s.format === 'webp' ? `q${s.quality}` : s.format === 'gif' ? `bayer${s.bayerScale}` : `crf${s.crf}`;
-    return `${s.format} ${s.width}px ${s.fps}fps ${q}`;
+    const extras = [
+      s.speed && s.speed !== 1 ? `${s.speed}×` : null,
+      crop ? `crop ${crop.width}×${crop.height}` : null,
+    ].filter(Boolean).join(' ');
+    return `${s.format} ${s.width}px ${s.fps}fps ${q}${extras ? ' ' + extras : ''}`;
   }
 
   function convertAll() {
@@ -172,6 +177,7 @@
       <Editor
         card={selected}
         on:trim={(e) => patchCard(selected.id, e.detail)}
+        on:crop={(e) => patchCard(selected.id, { crop: e.detail.crop })}
       />
       <div class="bottom">
         <SettingsPanel
