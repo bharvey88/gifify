@@ -140,10 +140,17 @@
       <span class="muted">({formatTime(clipLength(start, end))} clip)</span>
     </span>
     <div class="spacer" />
-    <button on:click={setStartToPlayhead} title="Set clip start to current playback position">⇤ Start here</button>
-    <button on:click={setEndToPlayhead} title="Set clip end to current playback position">End here ⇥</button>
+    <button on:click={setStartToPlayhead} title="Start the clip at the current playback position">
+      ⇤ Clip start → <span class="mono">{formatTime(currentTime)}</span>
+    </button>
+    <button on:click={setEndToPlayhead} title="End the clip at the current playback position">
+      Clip end → <span class="mono">{formatTime(currentTime)}</span> ⇥
+    </button>
     <button on:click={previewClip} class:active={looping}>{looping ? '◼ Stop loop' : '↻ Loop clip'}</button>
     <button on:click={resetTrim} disabled={start === 0 && end >= duration - 0.05}>Reset</button>
+  </div>
+  <div class="muted hint">
+    Trim by dragging the blue handles, or pause the video where you want the clip to begin/end and use the buttons above.
   </div>
 </div>
 
@@ -204,4 +211,5 @@
   .spacer { flex: 1; }
   .readout { font-size: 0.95rem; }
   button.active { border-color: var(--accent-2); color: var(--accent-2); }
+  .hint { font-size: 0.8rem; }
 </style>
