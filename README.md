@@ -39,12 +39,19 @@ npm start
 
 Your browser opens `http://localhost:3111`. That's it.
 
-On Windows you can skip the terminal after the first clone: double-click
-`gifify.cmd` in the repo folder. It installs dependencies on first run,
-starts the server, and opens your browser — close its window to stop gifify.
-Want it in the Start Menu? Right-click `gifify.cmd` → Show more options →
-Create shortcut, then move the shortcut into
-`%APPDATA%\Microsoft\Windows\Start Menu\Programs`.
+### Windows: no terminal needed
+
+After the first clone, double-click **`gifify-tray.vbs`** — gifify starts with
+no console window and lives in the system tray. Double-click the tray icon to
+open the app; right-click it for **Open gifify**, **Open output folder**, and
+**Exit** (which stops the server). First run installs dependencies
+automatically, and launching it again while it's running just opens the app.
+
+Want it in the Start Menu? Create a shortcut to `gifify-tray.vbs` and move it
+into `%APPDATA%\Microsoft\Windows\Start Menu\Programs`.
+
+Prefer visible logs? `gifify.cmd` runs it in a console window instead —
+close the window to stop it.
 
 Flags and environment:
 
