@@ -2,6 +2,12 @@
 
 [![CI](https://github.com/bharvey88/gifify/actions/workflows/ci.yml/badge.svg)](https://github.com/bharvey88/gifify/actions/workflows/ci.yml)
 
+![gifify demo](.github/assets/gifify-demo.webp)
+
+*The demo above practices what it preaches: the screen recorder produced a
+53 MB GIF; gifify's WebP pipeline turned it into the 5 MB animation you're
+watching.*
+
 A local web app that turns screen recordings into **animated WebP**, **GIF**, or
 **tiny MP4** clips — built for documentation wikis, READMEs, and anywhere you
 need a short demo that loads fast.
