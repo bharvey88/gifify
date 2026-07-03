@@ -98,6 +98,11 @@ hotkey, ShareX saves the file and stops, so "completed" just means "saved to
 disk". You can confirm in ShareX's **History**: an entry with a file path but
 an empty URL column never attempted an upload.
 
+**Second gotcha:** the override only applies when the recording starts from
+that hotkey (or from the tray menu's **Workflows** section, which carries
+hotkey settings). Starting a recording from **Capture → Screen recording**
+in the menu uses the global task settings and won't upload.
+
 Also don't use the **Test** button in the Custom uploader settings window;
 ShareX tests with a fake non-video file, which gifify correctly rejects. Test
 by recording a short **Screen recording** (plain, not the GIF variant) with
