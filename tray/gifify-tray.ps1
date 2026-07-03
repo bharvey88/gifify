@@ -57,7 +57,8 @@ $openItem.add_Click({ Start-Process $url })
 
 $folderItem = $menu.Items.Add('Open output folder')
 $folderItem.add_Click({
-    $outputDir = Join-Path $root 'output'
+    $outputDir = Join-Path $env:USERPROFILE 'Downloads'
+    if (-not (Test-Path $outputDir)) { $outputDir = Join-Path $root 'output' }
     $cfg = Join-Path $env:USERPROFILE '.gifify.json'
     if (Test-Path $cfg) {
         try {

@@ -24,7 +24,12 @@ export function makeVideoDir(id) {
 }
 
 export function loadSettings() {
-  const defaults = { outputDir: path.join(PROJECT_ROOT, 'output') };
+  // Default to ~/Downloads (present on Windows/macOS and most Linux setups);
+  // fall back to an output/ dir in the repo if it doesn't exist.
+  const downloads = path.join(os.homedir(), 'Downloads');
+  const defaults = {
+    outputDir: fs.existsSync(downloads) ? downloads : path.join(PROJECT_ROOT, 'output'),
+  };
   try {
     return { ...defaults, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) };
   } catch {
