@@ -21,12 +21,18 @@ sizes until it's right. Your videos never leave your machine: the app runs on
 - **Drag-and-drop queue** — drop one or many videos; each keeps its own settings
 - **Visual trimming** — drag start/end handles on a timeline, or set them from
   the playhead; loop-preview just the trimmed range
+- **Crop** — draw a box right on the video frame; drag inside it to reposition
+- **Speed** — 1x to 3x, which shortens the clip and shrinks the file
 - **Live results** — see the animated output and its file size right in the
   page, tweak quality/width/fps, convert again, and compare attempts
+- **Copy for pasting** — one click copies a ready-made Markdown or HTML snippet
 - **Presets** — Wiki WebP (24 fps, 720 px), Wiki GIF (15 fps, palette-optimized),
   Tiny MP4 (x264, faststart)
 - **Real progress** — ffmpeg progress streamed live to the UI
-- Results are saved to a folder you choose **and** downloadable from the browser
+- **[ShareX integration](docs/sharex.md)** — stop a recording and it opens in
+  the editor, or converts automatically
+- Results are saved to your Downloads folder (changeable in settings) **and**
+  downloadable from the browser
 
 ## Requirements
 
@@ -47,6 +53,14 @@ npm start
 
 Your browser opens `http://localhost:3111`. That's it.
 
+To update later: `git pull` then `npm install` (which rebuilds the UI).
+
+Flags and environment:
+
+- `npm start -- --no-open` (or `GIFIFY_NO_OPEN=1`) — don't auto-open a browser
+- `PORT=4000 npm start` — different port
+- `GIFIFY_MAX_UPLOAD_MB=4096` — raise the 2 GB upload cap
+
 ### Windows: no terminal needed
 
 After the first clone, double-click **`gifify-tray.vbs`** — gifify starts with
@@ -63,61 +77,10 @@ close the window to stop it.
 
 ### ShareX integration
 
-If you record with [ShareX](https://getsharex.com/), gifify can pick up right
-where the recording stops. Two custom uploaders live in [`sharex/`](sharex/):
-
-- **gifify (open editor)** — the recording lands in gifify's trim editor in a
-  new browser tab, ready to trim, crop, and convert.
-- **gifify (auto WebP)** — converts immediately with the Wiki WebP preset and
-  puts the output file path on your clipboard. No trimming, zero clicks.
-
-Setup:
-
-1. Double-click **`sharex\install.cmd`** inside your cloned gifify folder and
-   accept ShareX's two import prompts. (The `.sxcu` files are on your disk
-   already, no downloading; `install.cmd` just opens both for you.)
-2. In ShareX: **Destinations → File uploader → Custom file uploader**. The
-   gifify entries never appear in that menu by name; custom uploaders live one
-   level deeper.
-3. **Destinations → Custom uploader settings...**: both gifify entries show in
-   the list. In the bottom-left dropdowns, set **File uploader** to the one you
-   want (the other dropdowns don't matter for recordings).
-4. Attach the upload step to your screen-recording hotkey only: open
-   **Hotkey settings...**, click the **gear icon** on your screen recording
-   hotkey, enable **Override after capture tasks**, and check
-   **Upload image to host** inside the override.
-
-**Do not** enable **Upload image to host** globally under
-**After capture tasks**. That task applies to every capture, so your
-screenshots would start uploading to whatever your Image uploader destination
-is (Imgur by default). The per-hotkey override above uploads recordings only.
-
-**Gotcha:** if ShareX says the task completed but nothing shows up in gifify,
-it's almost always step 4. Without **Upload image to host** on the recording
-hotkey, ShareX saves the file and stops, so "completed" just means "saved to
-disk". You can confirm in ShareX's **History**: an entry with a file path but
-an empty URL column never attempted an upload.
-
-**Second gotcha:** the override only applies when the recording starts from
-that hotkey (or from the tray menu's **Workflows** section, which carries
-hotkey settings). Starting a recording from **Capture → Screen recording**
-in the menu uses the global task settings and won't upload.
-
-Also don't use the **Test** button in the Custom uploader settings window;
-ShareX tests with a fake non-video file, which gifify correctly rejects. Test
-by recording a short **Screen recording** (plain, not the GIF variant) with
-gifify running. Record with plain
-**Screen recording** (MP4), not **Screen recording (GIF)** — the MP4 is the
-full-quality source and gifify does the GIF/WebP conversion properly from it.
-
-gifify has to be running (tray icon or `npm start`) when the recording
-finishes, or ShareX will report a connection error.
-
-Flags and environment:
-
-- `npm start -- --no-open` (or `GIFIFY_NO_OPEN=1`) — don't auto-open a browser
-- `PORT=4000 npm start` — different port
-- `GIFIFY_MAX_UPLOAD_MB=4096` — raise the 2 GB upload cap
+Stop a ShareX screen recording and have it open straight in gifify's editor
+(or convert automatically with zero clicks). Setup takes a few minutes and has
+a couple of ShareX-specific traps, so it has its own guide:
+**[docs/sharex.md](docs/sharex.md)**.
 
 ## Why animated WebP?
 
@@ -130,7 +93,7 @@ MP4 preset is smaller still if your target supports `<video>`.
 
 ```sh
 npm run dev    # Vite dev server (hot reload) + API server
-npm test       # vitest: ffmpeg arg builder, job queue, trim math
+npm test       # vitest: ffmpeg arg builder, job queue, trim + crop math
 npm run build  # rebuild the production frontend into dist/
 ```
 
