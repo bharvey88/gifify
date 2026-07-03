@@ -82,11 +82,20 @@ Setup:
 3. **Destinations → Custom uploader settings...**: both gifify entries show in
    the list. In the bottom-left dropdowns, set **File uploader** to the one you
    want (the other dropdowns don't matter for recordings).
-4. Make sure your screen-recording task ends with **Upload image to host**.
+4. In the main window's left menu, click **After capture tasks** and check
+   **Upload image to host**. Despite the name it applies to recordings too,
+   and it's unchecked in a default ShareX install.
 
-Don't use the **Test** button in that window; ShareX tests with a fake
-non-video file, which gifify correctly rejects. Test by recording a short
-**Screen recording** with gifify running. Record with plain
+**Gotcha:** if ShareX says the task completed but nothing shows up in gifify,
+it's almost always step 4. Without **Upload image to host**, ShareX saves the
+recording and stops, so "completed" just means "saved to disk". You can
+confirm in ShareX's **History**: an entry with a file path but an empty URL
+column never attempted an upload.
+
+Also don't use the **Test** button in the Custom uploader settings window;
+ShareX tests with a fake non-video file, which gifify correctly rejects. Test
+by recording a short **Screen recording** (plain, not the GIF variant) with
+gifify running. Record with plain
 **Screen recording** (MP4), not **Screen recording (GIF)** — the MP4 is the
 full-quality source and gifify does the GIF/WebP conversion properly from it.
 
