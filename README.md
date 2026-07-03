@@ -82,15 +82,21 @@ Setup:
 3. **Destinations → Custom uploader settings...**: both gifify entries show in
    the list. In the bottom-left dropdowns, set **File uploader** to the one you
    want (the other dropdowns don't matter for recordings).
-4. In the main window's left menu, click **After capture tasks** and check
-   **Upload image to host**. Despite the name it applies to recordings too,
-   and it's unchecked in a default ShareX install.
+4. Attach the upload step to your screen-recording hotkey only: open
+   **Hotkey settings...**, click the **gear icon** on your screen recording
+   hotkey, enable **Override after capture tasks**, and check
+   **Upload image to host** inside the override.
+
+**Do not** enable **Upload image to host** globally under
+**After capture tasks**. That task applies to every capture, so your
+screenshots would start uploading to whatever your Image uploader destination
+is (Imgur by default). The per-hotkey override above uploads recordings only.
 
 **Gotcha:** if ShareX says the task completed but nothing shows up in gifify,
-it's almost always step 4. Without **Upload image to host**, ShareX saves the
-recording and stops, so "completed" just means "saved to disk". You can
-confirm in ShareX's **History**: an entry with a file path but an empty URL
-column never attempted an upload.
+it's almost always step 4. Without **Upload image to host** on the recording
+hotkey, ShareX saves the file and stops, so "completed" just means "saved to
+disk". You can confirm in ShareX's **History**: an entry with a file path but
+an empty URL column never attempted an upload.
 
 Also don't use the **Test** button in the Custom uploader settings window;
 ShareX tests with a fake non-video file, which gifify correctly rejects. Test
