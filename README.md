@@ -71,9 +71,12 @@ where the recording stops. Two custom uploaders live in [`sharex/`](sharex/):
 - **gifify (auto WebP)** — converts immediately with the Wiki WebP preset and
   puts the output file path on your clipboard. No trimming, zero clicks.
 
-Setup: double-click a `.sxcu` file and let ShareX add it, then in ShareX set
-**Destinations → File uploader** to the gifify entry and make sure your
-screen-recording task ends with **Upload image to host**. Record with plain
+Setup: double-click **`sharex\install.cmd`** inside your cloned gifify folder
+and accept ShareX's two import prompts. (The `.sxcu` files are on your disk
+already, no downloading; `install.cmd` just opens both for you. You can also
+double-click them individually.) Then in ShareX set
+**Destinations → File uploader** to the gifify entry you want and make sure
+your screen-recording task ends with **Upload image to host**. Record with plain
 **Screen recording** (MP4), not **Screen recording (GIF)** — the MP4 is the
 full-quality source and gifify does the GIF/WebP conversion properly from it.
 
