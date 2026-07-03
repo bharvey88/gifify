@@ -20,11 +20,26 @@
 
   onMount(async () => {
     try {
-      [health, presets, serverSettings] = await Promise.all([
+      let existing;
+      [health, presets, serverSettings, existing] = await Promise.all([
         api.getHealth(),
         api.getPresets(),
         api.getSettings(),
+        api.listVideos(),
       ]);
+      // Adopt videos already on the server (ShareX uploads, page reloads).
+      cards = existing.map((meta) => ({
+        ...meta,
+        status: 'ready',
+        pct: 0,
+        settings: defaultSettings(),
+        attempts: [],
+        startSec: 0,
+        endSec: meta.durationSec ?? null,
+      }));
+      const requested = new URLSearchParams(location.search).get('video');
+      selectedId = cards.find((c) => c.id === requested)?.id ?? cards[0]?.id ?? null;
+      if (requested) history.replaceState(null, '', '/');
     } catch (err) {
       globalError = `Cannot reach the gifify server: ${err.message}`;
     }

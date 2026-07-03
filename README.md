@@ -61,6 +61,25 @@ into `%APPDATA%\Microsoft\Windows\Start Menu\Programs`.
 Prefer visible logs? `gifify.cmd` runs it in a console window instead —
 close the window to stop it.
 
+### ShareX integration
+
+If you record with [ShareX](https://getsharex.com/), gifify can pick up right
+where the recording stops. Two custom uploaders live in [`sharex/`](sharex/):
+
+- **gifify (open editor)** — the recording lands in gifify's trim editor in a
+  new browser tab, ready to trim, crop, and convert.
+- **gifify (auto WebP)** — converts immediately with the Wiki WebP preset and
+  puts the output file path on your clipboard. No trimming, zero clicks.
+
+Setup: double-click a `.sxcu` file and let ShareX add it, then in ShareX set
+**Destinations → File uploader** to the gifify entry and make sure your
+screen-recording task ends with **Upload image to host**. Record with plain
+**Screen recording** (MP4), not **Screen recording (GIF)** — the MP4 is the
+full-quality source and gifify does the GIF/WebP conversion properly from it.
+
+gifify has to be running (tray icon or `npm start`) when the recording
+finishes, or ShareX will report a connection error.
+
 Flags and environment:
 
 - `npm start -- --no-open` (or `GIFIFY_NO_OPEN=1`) — don't auto-open a browser

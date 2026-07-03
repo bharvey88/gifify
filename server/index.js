@@ -64,8 +64,9 @@ app.put('/api/settings', (req, res) => {
 
 // ---- videos ----
 
-app.post('/api/videos', upload.single('video'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+// Probe an uploaded file and register it as a video card. Throws on
+// unreadable input (and cleans up the temp dir).
+async function registerUpload(req) {
   const id = req.videoId;
   try {
     const meta = await probe(req.file.path);
@@ -77,10 +78,27 @@ app.post('/api/videos', upload.single('video'), async (req, res) => {
       ...meta,
     };
     videos.set(id, video);
-    res.json({ id, name: video.name, durationSec: meta.durationSec, width: meta.width, height: meta.height });
+    return video;
   } catch (err) {
     fs.rmSync(path.dirname(req.file.path), { recursive: true, force: true });
-    res.status(422).json({ error: `Could not read video: ${err.message}` });
+    throw new Error(`Could not read video: ${err.message}`);
+  }
+}
+
+function videoSummary(v) {
+  return { id: v.id, name: v.name, durationSec: v.durationSec, width: v.width, height: v.height };
+}
+
+app.get('/api/videos', (req, res) => {
+  res.json([...videos.values()].map(videoSummary));
+});
+
+app.post('/api/videos', upload.single('video'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    res.json(videoSummary(await registerUpload(req)));
+  } catch (err) {
+    res.status(422).json({ error: err.message });
   }
 });
 
@@ -97,17 +115,9 @@ app.delete('/api/videos/:id', (req, res) => {
 
 // ---- conversion jobs ----
 
-app.post('/api/convert', (req, res) => {
-  const video = videos.get(req.body?.videoId);
-  if (!video) return res.status(404).json({ error: 'Unknown video' });
-
-  let jobSettings;
-  try {
-    jobSettings = normalizeSettings(req.body);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
+// Create a job and enqueue it. Returns {job, done} where done resolves when
+// the conversion finishes (job.status then reflects the outcome).
+function createJob(video, jobSettings) {
   const id = newId();
   const job = {
     id,
@@ -123,9 +133,63 @@ app.post('/api/convert', (req, res) => {
     listeners: new Set(),
   };
   jobs.set(id, job);
+  const done = queue.push(() => runJob(job, video)).catch(() => {}); // errors recorded on the job itself
+  return { job, done };
+}
 
-  queue.push(() => runJob(job, video)).catch(() => {}); // errors recorded on the job itself
-  res.json({ jobId: id });
+app.post('/api/convert', (req, res) => {
+  const video = videos.get(req.body?.videoId);
+  if (!video) return res.status(404).json({ error: 'Unknown video' });
+
+  let jobSettings;
+  try {
+    jobSettings = normalizeSettings(req.body);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const { job } = createJob(video, jobSettings);
+  res.json({ jobId: job.id });
+});
+
+// ---- ShareX integration ----
+// POST a recording here from a ShareX custom uploader (see sharex/*.sxcu).
+//   ?mode=edit (default): register the clip and open the gifify editor on it.
+//   ?mode=convert: convert immediately with a preset (?preset=wiki-webp)
+//   and respond with the saved output path once it's done.
+app.post('/api/sharex', upload.single('video'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  let video;
+  try {
+    video = await registerUpload(req);
+  } catch (err) {
+    return res.status(422).json({ error: err.message });
+  }
+
+  const mode = req.query.mode === 'convert' ? 'convert' : 'edit';
+  const editUrl = `http://localhost:${PORT}/?video=${video.id}`;
+
+  if (mode === 'edit') {
+    if (req.query.open !== '0') openBrowser(editUrl);
+    return res.json({ url: editUrl, ...videoSummary(video) });
+  }
+
+  const presetKey = req.query.preset || 'wiki-webp';
+  const preset = PRESETS[presetKey];
+  if (!preset) {
+    return res.status(400).json({ error: `Unknown preset: ${presetKey} (have: ${Object.keys(PRESETS).join(', ')})` });
+  }
+
+  const { job, done } = createJob(video, normalizeSettings(preset));
+  await done;
+  if (job.status !== 'done') {
+    return res.status(500).json({ error: job.error || 'Conversion failed' });
+  }
+  if (!job.outPath) {
+    return res.status(500).json({ error: 'Converted, but could not save to the output folder' });
+  }
+  res.json({ url: job.outPath, bytes: job.bytes });
 });
 
 function emit(job, payload) {

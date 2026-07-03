@@ -1,0 +1,14 @@
+{
+  "Version": "15.0.0",
+  "Name": "gifify (auto WebP)",
+  "DestinationType": "FileUploader",
+  "RequestMethod": "POST",
+  "RequestURL": "http://localhost:3111/api/sharex",
+  "Parameters": {
+    "mode": "convert",
+    "preset": "wiki-webp"
+  },
+  "Body": "MultipartFormData",
+  "FileFormName": "video",
+  "URL": "{json:url}"
+}

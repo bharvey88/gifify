@@ -15,6 +15,8 @@ export const putSettings = (settings) =>
     body: JSON.stringify(settings),
   }).then(json);
 
+export const listVideos = () => fetch('/api/videos').then(json);
+
 export async function uploadVideo(file) {
   const form = new FormData();
   form.append('video', file);
