@@ -8,6 +8,7 @@
   import SetupScreen from './components/SetupScreen.svelte';
   import OutputFolder from './components/OutputFolder.svelte';
   import * as api from './lib/api.js';
+  import * as ts from './lib/targetsize.js';
 
   let health = null;
   let presets = {};
@@ -97,18 +98,18 @@
     patchCard(card.id, { settings: { ...card.settings, ...preset } });
   }
 
-  async function convert(card) {
-    if (!card || ['uploading', 'converting', 'queued'].includes(card.status)) return;
+  // Convert with explicit settings; resolves with the finished attempt.
+  async function convertWith(card, settings) {
     patchCard(card.id, { status: 'queued', pct: 0, error: null });
-    try {
-      const { jobId } = await api.startConvert({
-        videoId: card.id,
-        ...card.settings,
-        startSec: card.startSec,
-        endSec: card.endSec,
-        crop: card.crop ?? null,
-      });
-      patchCard(card.id, { currentJobId: jobId });
+    const { jobId } = await api.startConvert({
+      videoId: card.id,
+      ...settings,
+      startSec: card.startSec,
+      endSec: card.endSec,
+      crop: card.crop ?? null,
+    });
+    patchCard(card.id, { currentJobId: jobId });
+    return new Promise((resolve, reject) => {
       api.watchJob(jobId, (evt) => {
         if (evt.status === 'running') {
           patchCard(card.id, { status: 'converting', stage: evt.stage ?? 'encode', pct: evt.pct ?? 0 });
@@ -117,8 +118,8 @@
           const attempt = {
             jobId,
             bytes: evt.bytes,
-            format: card.settings.format,
-            summary: summarize(card.settings, card.crop),
+            format: settings.format,
+            summary: summarize(settings, card.crop),
             outPath: evt.outPath,
             saveError: evt.saveError || null,
           };
@@ -127,12 +128,54 @@
             pct: 100,
             attempts: [attempt, ...(current?.attempts ?? [])],
           });
+          resolve(attempt);
         } else if (evt.status === 'failed') {
           patchCard(card.id, { status: 'failed', error: evt.error });
+          reject(new Error(evt.error));
         }
       });
+    });
+  }
+
+  async function convert(card) {
+    if (!card || ['uploading', 'converting', 'queued'].includes(card.status)) return;
+    patchCard(card.id, { fitNote: null });
+    try {
+      await convertWith(card, card.settings);
     } catch (err) {
       patchCard(card.id, { status: 'failed', error: err.message });
+    }
+  }
+
+  // Target-size mode: binary-search the format's size knob until the result
+  // fits under targetMB, keeping the highest quality that does.
+  async function autoFit(card, targetMB) {
+    if (!card || ['uploading', 'converting', 'queued'].includes(card.status)) return;
+    const targetBytes = targetMB * 1024 * 1024;
+    let state = ts.initSearch(card.settings.format, card.settings);
+    try {
+      for (;;) {
+        const axis = ts.nextProbe(state);
+        if (axis == null) break;
+        patchCard(card.id, {
+          fitNote: `Fitting under ${targetMB} MB — attempt ${state.attempts + 1}/${ts.MAX_ATTEMPTS}: trying ${ts.describeAxis(state, axis)}…`,
+        });
+        const attempt = await convertWith(card, ts.axisToSettings(state, axis));
+        state = ts.recordResult(state, axis, attempt.bytes, targetBytes, attempt.jobId);
+      }
+    } catch (err) {
+      patchCard(card.id, { fitNote: `Auto-fit stopped: ${err.message}` });
+      return;
+    }
+    if (state.best) {
+      patchCard(card.id, {
+        settings: ts.axisToSettings(state, state.best.axis),
+        fitNote: `✓ Fits: ${(state.best.bytes / 1024 / 1024).toFixed(2)} MB at ${ts.describeAxis(state, state.best.axis)} (best of ${state.attempts} attempts, in history)`,
+      });
+    } else {
+      patchCard(card.id, {
+        fitNote: `Couldn't get under ${targetMB} MB — smallest was ${(state.smallest.bytes / 1024 / 1024).toFixed(2)} MB at ${ts.describeAxis(state, state.smallest.axis)}. Try a shorter trim, lower fps, or a smaller width.`,
+      });
     }
   }
 
@@ -202,6 +245,7 @@
           on:preset={(e) => applyPreset(selected, e.detail)}
           on:change={(e) => patchCard(selected.id, { settings: { ...selected.settings, ...e.detail } })}
           on:convert={() => convert(selected)}
+          on:autofit={(e) => autoFit(selected, e.detail)}
         />
         <ResultPanel card={selected} />
       </div>

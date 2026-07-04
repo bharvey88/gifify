@@ -25,6 +25,8 @@ sizes until it's right. Your videos never leave your machine: the app runs on
 - **Speed** — 1x to 3x, which shortens the clip and shrinks the file
 - **Live results** — see the animated output and its file size right in the
   page, tweak quality/width/fps, convert again, and compare attempts
+- **Auto-fit to a size** — type "10 MB" and gifify searches for the best
+  quality that fits (Discord caps, wiki budgets); every attempt stays in history
 - **Copy for pasting** — one click copies a ready-made Markdown or HTML snippet
 - **Presets** — Wiki WebP (24 fps, 720 px), Wiki GIF (15 fps, palette-optimized),
   Tiny MP4 (x264, faststart)

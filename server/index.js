@@ -312,7 +312,9 @@ process.on('exit', cleanupAll);
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
-app.listen(PORT, () => {
+// Bind to loopback only: gifify accepts arbitrary file uploads and runs
+// ffmpeg on them, so it should never be reachable from the LAN.
+app.listen(PORT, '127.0.0.1', () => {
   const url = `http://localhost:${PORT}`;
   console.log(`gifify running at ${url}`);
   if (!tools.ffmpeg || !tools.ffprobe) {

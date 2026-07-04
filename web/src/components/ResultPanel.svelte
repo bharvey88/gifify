@@ -33,6 +33,9 @@
 </script>
 
 <div class="panel result">
+  {#if card.fitNote}
+    <div class="fit-note">{card.fitNote}</div>
+  {/if}
   {#if card.status === 'converting' || card.status === 'queued'}
     <div class="progress">
       {#if card.status === 'queued'}
@@ -143,6 +146,13 @@
     to { margin-left: 70%; }
   }
   .error { color: var(--danger); }
+  .fit-note {
+    font-size: 0.85rem;
+    color: var(--accent-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+  }
   .error pre {
     white-space: pre-wrap;
     font-size: 0.75rem;

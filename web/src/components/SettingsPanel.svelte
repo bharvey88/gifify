@@ -14,6 +14,7 @@
   };
 
   let showAdvanced = false;
+  let targetMB = 10;
 
   $: s = card.settings;
 
@@ -95,6 +96,16 @@
   <button class="primary convert" disabled={busy} on:click={() => dispatch('convert')}>
     {busy ? 'Converting…' : `Convert to ${s.format.toUpperCase()}`}
   </button>
+
+  <div class="target">
+    <span class="muted">or fit under</span>
+    <input type="number" min="0.5" step="0.5" bind:value={targetMB} disabled={busy} />
+    <span class="muted">MB</span>
+    <button disabled={busy || !(targetMB > 0)} on:click={() => dispatch('autofit', targetMB)}
+      title="Convert a few times, searching for the best quality that fits the size">
+      🎯 Auto-fit
+    </button>
+  </div>
 </div>
 
 <style>
@@ -112,4 +123,11 @@
   label .mono { color: var(--text); }
   .seg { display: flex; gap: 6px; }
   .convert { padding: 10px; font-size: 1rem; }
+  .target {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+  }
+  .target input { width: 70px; }
 </style>
