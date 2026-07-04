@@ -11,6 +11,32 @@
 
 export const MAX_ATTEMPTS = 6;
 
+// Probes run on a short sample slice so the search is fast regardless of
+// clip length; aim slightly under target to absorb sampling error.
+export const SAMPLE_SEC = 3;
+export const SAFETY_MARGIN = 0.9;
+
+// Middle SAMPLE_SEC seconds of the trimmed range (source timeline).
+export function sampleWindow(startSec, endSec) {
+  const len = endSec - startSec;
+  if (len <= SAMPLE_SEC) return { startSec, endSec };
+  const mid = startSec + len / 2;
+  return { startSec: mid - SAMPLE_SEC / 2, endSec: mid + SAMPLE_SEC / 2 };
+}
+
+// Scale a sample's byte count up to the full clip length.
+export function estimateFullBytes(sampleBytes, sampleLenSec, fullLenSec) {
+  if (sampleLenSec <= 0) return sampleBytes;
+  return sampleBytes * (fullLenSec / sampleLenSec);
+}
+
+// Video bitrate (bits/sec) that lands an mp4 at targetBytes for the given
+// OUTPUT duration (i.e. after any speed change). 3% container overhead.
+export function mp4BitrateFor(targetBytes, outputLenSec) {
+  if (outputLenSec <= 0) return null;
+  return Math.floor((targetBytes * 8 * 0.97) / outputLenSec);
+}
+
 function axisSpec(format, baseSettings) {
   if (format === 'webp') return { lo: 10, hi: 95, step: 5 };
   if (format === 'mp4') return { lo: 18, hi: 40, step: 1 };
@@ -37,6 +63,7 @@ export function initSearch(format, baseSettings) {
     format,
     base: { ...baseSettings },
     ...spec,
+    lo0: spec.lo, // original floor, for corrective steps after the search
     attempts: 0,
     best: null,     // {axis, bytes, jobId} of the highest-quality fit so far
     smallest: null, // smallest result seen, for the "nothing fits" report

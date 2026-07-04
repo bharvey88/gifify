@@ -1,7 +1,29 @@
 import { describe, it, expect } from 'vitest';
 import {
   initSearch, nextProbe, recordResult, axisToSettings, describeAxis, MAX_ATTEMPTS,
+  sampleWindow, estimateFullBytes, mp4BitrateFor, SAMPLE_SEC,
 } from './targetsize.js';
+
+describe('sampling helpers', () => {
+  it('takes the middle SAMPLE_SEC seconds of longer clips', () => {
+    const w = sampleWindow(10, 30); // 20s clip
+    expect(w.endSec - w.startSec).toBeCloseTo(SAMPLE_SEC);
+    expect((w.startSec + w.endSec) / 2).toBeCloseTo(20);
+  });
+  it('uses the whole clip when it is already short', () => {
+    expect(sampleWindow(2, 4)).toEqual({ startSec: 2, endSec: 4 });
+  });
+  it('scales sample bytes to the full length', () => {
+    expect(estimateFullBytes(1_000_000, 3, 30)).toBe(10_000_000);
+  });
+  it('computes an mp4 bitrate that fits the byte budget', () => {
+    // 10 MB over 20s output: <= 10MB*8/20 bits/sec, minus overhead
+    const b = mp4BitrateFor(10 * 1024 * 1024, 20);
+    expect(b).toBeLessThanOrEqual((10 * 1024 * 1024 * 8) / 20);
+    expect(b).toBeGreaterThan(((10 * 1024 * 1024 * 8) / 20) * 0.9);
+    expect(mp4BitrateFor(10, 0)).toBeNull();
+  });
+});
 
 // Simulate a full search against a monotonic size model: size = axis * scale.
 function runSearch(format, base, targetBytes, bytesForAxis) {

@@ -104,6 +104,33 @@ export function buildPasses(settings, inputPath, outputPath, palettePath) {
   }
 
   if (format === 'mp4') {
+    // Exact size targeting: two-pass ABR when a bitrate is given (auto-fit),
+    // otherwise the usual single-pass CRF.
+    if (settings.videoBitrate) {
+      const bv = String(Math.round(settings.videoBitrate));
+      const passlog = `${outputPath}.ffpass`;
+      const nullSink = process.platform === 'win32' ? 'NUL' : '/dev/null';
+      const common = ['-an', '-c:v', 'libx264', '-preset', 'slow', '-b:v', bv, '-passlogfile', passlog];
+      return [
+        {
+          kind: 'analyze',
+          args: [
+            ...COMMON, ...seek, ...len, '-i', inputPath,
+            '-vf', `${vf},format=yuv420p`,
+            ...common, '-pass', '1', '-f', 'null', nullSink,
+          ],
+        },
+        {
+          kind: 'encode',
+          args: [
+            ...COMMON, ...seek, ...len, '-i', inputPath,
+            '-vf', `${vf},format=yuv420p`,
+            ...common, '-pass', '2', '-movflags', '+faststart',
+            outputPath,
+          ],
+        },
+      ];
+    }
     const crf = numberOr(settings.crf, DEFAULTS.mp4.crf);
     return [
       {
@@ -138,7 +165,13 @@ export function normalizeSettings(raw) {
   s.crop = normalizeCrop(raw.crop);
   if (format === 'webp') s.quality = clampInt(raw.quality, 0, 100, d.quality);
   if (format === 'gif') s.bayerScale = clampInt(raw.bayerScale, 0, 5, d.bayerScale);
-  if (format === 'mp4') s.crf = clampInt(raw.crf, 0, 51, d.crf);
+  if (format === 'mp4') {
+    s.crf = clampInt(raw.crf, 0, 51, d.crf);
+    if (raw.videoBitrate != null) {
+      s.videoBitrate = clampInt(raw.videoBitrate, 50_000, 50_000_000, 0) || null;
+    }
+  }
+  s.probe = raw.probe === true; // probe conversions skip the output-folder save
   return s;
 }
 

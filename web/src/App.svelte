@@ -99,13 +99,16 @@
   }
 
   // Convert with explicit settings; resolves with the finished attempt.
-  async function convertWith(card, settings) {
+  // opts.probe: measure-only run (no output-folder save, no history entry).
+  // opts.trim: {startSec, endSec} override, used by probe sampling.
+  async function convertWith(card, settings, opts = {}) {
     patchCard(card.id, { status: 'queued', pct: 0, error: null });
     const { jobId } = await api.startConvert({
       videoId: card.id,
       ...settings,
-      startSec: card.startSec,
-      endSec: card.endSec,
+      probe: opts.probe === true,
+      startSec: opts.trim?.startSec ?? card.startSec,
+      endSec: opts.trim?.endSec ?? card.endSec,
       crop: card.crop ?? null,
     });
     patchCard(card.id, { currentJobId: jobId });
@@ -126,7 +129,7 @@
           patchCard(card.id, {
             status: 'done',
             pct: 100,
-            attempts: [attempt, ...(current?.attempts ?? [])],
+            ...(opts.probe ? {} : { attempts: [attempt, ...(current?.attempts ?? [])] }),
           });
           resolve(attempt);
         } else if (evt.status === 'failed') {
@@ -147,35 +150,79 @@
     }
   }
 
-  // Target-size mode: binary-search the format's size knob until the result
-  // fits under targetMB, keeping the highest quality that does.
+  // Target-size mode. mp4: exact two-pass bitrate targeting (one visible
+  // conversion). webp/gif: fast probes on a short sample slice to find the
+  // quality, then one real conversion at the answer.
   async function autoFit(card, targetMB) {
     if (!card || ['uploading', 'converting', 'queued'].includes(card.status)) return;
     const targetBytes = targetMB * 1024 * 1024;
-    let state = ts.initSearch(card.settings.format, card.settings);
+    const start = card.startSec ?? 0;
+    const end = card.endSec ?? card.durationSec;
+    if (!Number.isFinite(end)) {
+      patchCard(card.id, { fitNote: 'Auto-fit needs a known clip length — set an end point on the scrubber first.' });
+      return;
+    }
+    const speed = card.settings.speed || 1;
+    const outLen = Math.max((end - start) / speed, 0.1);
+    const mb = (b) => `${(b / 1024 / 1024).toFixed(2)} MB`;
+
     try {
+      if (card.settings.format === 'mp4') {
+        // Exact math: size / duration = bitrate; verify, correct once if off.
+        let bitrate = ts.mp4BitrateFor(targetBytes, outLen);
+        patchCard(card.id, { fitNote: `Targeting ${targetMB} MB with two-pass encoding…` });
+        let attempt = await convertWith(card, { ...card.settings, videoBitrate: bitrate });
+        if (attempt.bytes > targetBytes) {
+          bitrate = Math.floor(bitrate * (targetBytes / attempt.bytes) * 0.97);
+          patchCard(card.id, { fitNote: `Slightly over (${mb(attempt.bytes)}) — correcting…` });
+          attempt = await convertWith(card, { ...card.settings, videoBitrate: bitrate });
+        }
+        patchCard(card.id, {
+          fitNote: attempt.bytes <= targetBytes
+            ? `✓ Fits: ${mb(attempt.bytes)} under the ${targetMB} MB target`
+            : `Landed at ${mb(attempt.bytes)} — x264 couldn't go lower without a shorter clip or smaller width`,
+        });
+        return;
+      }
+
+      // webp/gif: probe on the middle few seconds, scale up the estimate.
+      const win = ts.sampleWindow(start, end);
+      const sampleLen = (win.endSec - win.startSec) / speed;
+      const probeTarget = targetBytes * ts.SAFETY_MARGIN;
+      let state = ts.initSearch(card.settings.format, card.settings);
       for (;;) {
         const axis = ts.nextProbe(state);
         if (axis == null) break;
+        patchCard(card.id, { fitNote: `Estimating size — quick probe ${state.attempts + 1} (${ts.describeAxis(state, axis)})…` });
+        const probe = await convertWith(card, ts.axisToSettings(state, axis), { probe: true, trim: win });
+        const estimated = ts.estimateFullBytes(probe.bytes, sampleLen, outLen);
+        state = ts.recordResult(state, axis, estimated, probeTarget, probe.jobId);
+      }
+
+      const pick = state.best ?? state.smallest;
+      patchCard(card.id, { fitNote: `Converting the full clip at ${ts.describeAxis(state, pick.axis)}…` });
+      let attempt = await convertWith(card, ts.axisToSettings(state, pick.axis));
+
+      // The sample can under-estimate; take one corrective step down if over.
+      if (attempt.bytes > targetBytes && pick.axis - state.step >= state.lo0) {
+        const lower = pick.axis - state.step;
+        patchCard(card.id, { fitNote: `Slightly over (${mb(attempt.bytes)}) — one step down to ${ts.describeAxis(state, lower)}…` });
+        attempt = await convertWith(card, ts.axisToSettings(state, lower));
+        pick.axis = lower;
+      }
+
+      if (attempt.bytes <= targetBytes) {
         patchCard(card.id, {
-          fitNote: `Fitting under ${targetMB} MB — attempt ${state.attempts + 1}/${ts.MAX_ATTEMPTS}: trying ${ts.describeAxis(state, axis)}…`,
+          settings: ts.axisToSettings(state, pick.axis),
+          fitNote: `✓ Fits: ${mb(attempt.bytes)} at ${ts.describeAxis(state, pick.axis)}`,
         });
-        const attempt = await convertWith(card, ts.axisToSettings(state, axis));
-        state = ts.recordResult(state, axis, attempt.bytes, targetBytes, attempt.jobId);
+      } else {
+        patchCard(card.id, {
+          fitNote: `Couldn't get under ${targetMB} MB — landed at ${mb(attempt.bytes)}. Try a shorter trim, lower fps, or a smaller width.`,
+        });
       }
     } catch (err) {
       patchCard(card.id, { fitNote: `Auto-fit stopped: ${err.message}` });
-      return;
-    }
-    if (state.best) {
-      patchCard(card.id, {
-        settings: ts.axisToSettings(state, state.best.axis),
-        fitNote: `✓ Fits: ${(state.best.bytes / 1024 / 1024).toFixed(2)} MB at ${ts.describeAxis(state, state.best.axis)} (best of ${state.attempts} attempts, in history)`,
-      });
-    } else {
-      patchCard(card.id, {
-        fitNote: `Couldn't get under ${targetMB} MB — smallest was ${(state.smallest.bytes / 1024 / 1024).toFixed(2)} MB at ${ts.describeAxis(state, state.smallest.axis)}. Try a shorter trim, lower fps, or a smaller width.`,
-      });
     }
   }
 

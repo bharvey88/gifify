@@ -208,37 +208,46 @@ async function runJob(job, video) {
   const passes = buildPasses(job.settings, video.filePath, attemptPath, palettePath);
 
   try {
+    // palettegen's only output is a single palette image, so it emits no
+    // usable out_time — report that pass as indeterminate ('palette' stage).
+    // Progress-capable passes (encode, and analyze for two-pass mp4) split
+    // the 0-100 range evenly.
+    const progressPasses = passes.filter((p) => p.kind !== 'palette').length;
+    let passIndex = 0;
     for (const pass of passes) {
-      // palettegen's only output is a single palette image, so it emits no
-      // usable out_time — report that pass as indeterminate ('palette' stage)
-      // and map the real encode pass to 0-100%.
       job.stage = pass.kind;
       if (pass.kind === 'palette') {
         emit(job, { status: 'running', stage: 'palette' });
         await runPass(pass.args, null);
         continue;
       }
-      emit(job, { status: 'running', stage: 'encode', pct: job.pct });
+      const from = (passIndex / progressPasses) * 100;
+      const share = 100 / progressPasses;
+      emit(job, { status: 'running', stage: pass.kind, pct: job.pct });
       await runPass(pass.args, (sec) => {
         if (!clipLen) return;
-        job.pct = Math.round(Math.min((sec / clipLen) * 100, 100));
-        emit(job, { status: 'running', stage: 'encode', pct: job.pct });
+        job.pct = Math.round(Math.min(from + (sec / clipLen) * share, from + share));
+        emit(job, { status: 'running', stage: pass.kind, pct: job.pct });
       });
+      passIndex++;
     }
 
     job.bytes = fs.statSync(attemptPath).size;
     job.attemptPath = attemptPath;
 
-    // Also save to the configured output folder.
+    // Save to the configured output folder — except for probe conversions,
+    // which exist only to measure size.
     let saved = null;
     let saveError = null;
-    try {
-      fs.mkdirSync(settings.outputDir, { recursive: true });
-      saved = path.join(settings.outputDir, `${base}.${ext}`);
-      fs.copyFileSync(attemptPath, saved);
-    } catch (err) {
-      saved = null;
-      saveError = `Could not save to ${settings.outputDir}: ${err.message}`;
+    if (!job.settings.probe) {
+      try {
+        fs.mkdirSync(settings.outputDir, { recursive: true });
+        saved = path.join(settings.outputDir, `${base}.${ext}`);
+        fs.copyFileSync(attemptPath, saved);
+      } catch (err) {
+        saved = null;
+        saveError = `Could not save to ${settings.outputDir}: ${err.message}`;
+      }
     }
     job.outPath = saved;
 
@@ -251,6 +260,8 @@ async function runJob(job, video) {
     emit(job, { status: 'failed', error: job.error });
   } finally {
     fs.rmSync(palettePath, { force: true });
+    fs.rmSync(`${attemptPath}.ffpass-0.log`, { force: true });
+    fs.rmSync(`${attemptPath}.ffpass-0.log.mbtree`, { force: true });
     for (const listener of job.listeners) listener.end();
     job.listeners.clear();
   }

@@ -163,6 +163,39 @@ describe('crop', () => {
   });
 });
 
+describe('mp4 two-pass bitrate targeting', () => {
+  it('builds analyze + encode passes when videoBitrate is set', () => {
+    const s = normalizeSettings({ format: 'mp4', videoBitrate: 2_000_000 });
+    const passes = buildPasses(s, IN, 'C:/tmp/out.mp4', PALETTE);
+    expect(passes.map((p) => p.kind)).toEqual(['analyze', 'encode']);
+    const [p1, p2] = passes.map((p) => p.args.join(' '));
+    expect(p1).toContain('-b:v 2000000');
+    expect(p1).toContain('-pass 1');
+    expect(p1).toContain('-f null');
+    expect(passes[0].args.at(-1)).toMatch(/^(NUL|\/dev\/null)$/); // discards output
+    expect(p2).toContain('-pass 2');
+    expect(p2).toContain('-movflags +faststart');
+    expect(passes[1].args.at(-1)).toBe('C:/tmp/out.mp4');
+    // both passes share the passlog and the filter chain
+    expect(p1).toContain('-passlogfile');
+    expect(p2).toContain('-passlogfile');
+    expect(p1).toContain('format=yuv420p');
+    expect(p2).toContain('format=yuv420p');
+  });
+
+  it('ignores videoBitrate for non-mp4 and stays single-pass CRF without it', () => {
+    const webp = normalizeSettings({ format: 'webp', videoBitrate: 2_000_000 });
+    expect(webp.videoBitrate).toBeUndefined();
+    const mp4 = normalizeSettings({ format: 'mp4' });
+    expect(buildPasses(mp4, IN, 'C:/tmp/out.mp4', PALETTE)).toHaveLength(1);
+  });
+
+  it('carries the probe flag through normalization', () => {
+    expect(normalizeSettings({ format: 'webp', probe: true }).probe).toBe(true);
+    expect(normalizeSettings({ format: 'webp' }).probe).toBe(false);
+  });
+});
+
 describe('clipLengthSec', () => {
   it('uses endSec - startSec when trimmed', () => {
     expect(clipLengthSec({ startSec: 3, endSec: 19 }, 60)).toBe(16);
