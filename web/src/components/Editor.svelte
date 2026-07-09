@@ -240,6 +240,13 @@
     {#if card.crop}
       <button on:click={clearCrop}>Clear crop ({card.crop.width}×{card.crop.height})</button>
     {/if}
+    <button
+      on:click={() => dispatch('reverse', !card.settings.reverse)}
+      class:active={card.settings.reverse}
+      title="Play the clip backwards"
+    >
+      ⏪ Reverse
+    </button>
     <button on:click={resetTrim} disabled={start === 0 && end >= duration - 0.05}>Reset</button>
   </div>
   <div class="muted hint">

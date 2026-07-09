@@ -47,7 +47,7 @@
   });
 
   function defaultSettings() {
-    return { format: 'webp', fps: 24, width: 720, quality: 75, bayerScale: 5, crf: 28, speed: 1 };
+    return { format: 'webp', fps: 24, width: 720, quality: 75, bayerScale: 5, crf: 28, speed: 1, reverse: false };
   }
 
   async function addFiles(files) {
@@ -230,6 +230,7 @@
     const q = s.format === 'webp' ? `q${s.quality}` : s.format === 'gif' ? `bayer${s.bayerScale}` : `crf${s.crf}`;
     const extras = [
       s.speed && s.speed !== 1 ? `${s.speed}×` : null,
+      s.reverse ? 'reversed' : null,
       crop ? `crop ${crop.width}×${crop.height}` : null,
     ].filter(Boolean).join(' ');
     return `${s.format} ${s.width}px ${s.fps}fps ${q}${extras ? ' ' + extras : ''}`;
@@ -283,6 +284,7 @@
         card={selected}
         on:trim={(e) => patchCard(selected.id, e.detail)}
         on:crop={(e) => patchCard(selected.id, { crop: e.detail.crop })}
+        on:reverse={(e) => patchCard(selected.id, { settings: { ...selected.settings, reverse: e.detail } })}
       />
       <div class="bottom">
         <SettingsPanel

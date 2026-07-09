@@ -23,6 +23,7 @@ sizes until it's right. Your videos never leave your machine: the app runs on
   the playhead; loop-preview just the trimmed range
 - **Crop** — draw a box right on the video frame; drag inside it to reposition
 - **Speed** — 1x to 3x, which shortens the clip and shrinks the file
+- **Reverse** — one click to play the clip backwards
 - **Live results** — see the animated output and its file size right in the
   page, tweak quality/width/fps, convert again, and compare attempts
 - **Auto-fit to a size** — type "10 MB" and gifify finds the best quality that

@@ -137,6 +137,37 @@ describe('speed control', () => {
   });
 });
 
+describe('reverse', () => {
+  it('defaults off and adds no reverse filter', () => {
+    const s = normalizeSettings({ format: 'webp' });
+    expect(s.reverse).toBe(false);
+    expect(buildPasses(s, IN, OUT, PALETTE)[0].args.join(' ')).not.toContain('reverse');
+  });
+
+  it('appends reverse last so it runs on the downscaled frames', () => {
+    const s = normalizeSettings({ format: 'webp', reverse: true });
+    const args = buildPasses(s, IN, OUT, PALETTE)[0].args;
+    const vf = args[args.indexOf('-vf') + 1];
+    expect(vf).toBe('fps=24,scale=720:-1:flags=lanczos,reverse');
+  });
+
+  it('reverses both gif passes', () => {
+    const s = normalizeSettings({ format: 'gif', reverse: true });
+    const passes = buildPasses(s, IN, 'C:/tmp/out.gif', PALETTE);
+    // palettegen pass keeps its own suffix but still reverses first
+    expect(passes[0].args.join(' ')).toContain('scale=720:-1:flags=lanczos,reverse,palettegen');
+    expect(passes[1].args.join(' ')).toContain('scale=720:-1:flags=lanczos,reverse[x]');
+  });
+
+  it('combines with crop and speed in filter order crop,setpts,fps,scale,reverse', () => {
+    const s = normalizeSettings({
+      format: 'webp', speed: 2, reverse: true, crop: { x: 0, y: 0, width: 800, height: 600 },
+    });
+    const args = buildPasses(s, IN, OUT, PALETTE)[0].args;
+    expect(args[args.indexOf('-vf') + 1]).toBe('crop=800:600:0:0,setpts=PTS/2,fps=24,scale=720:-1:flags=lanczos,reverse');
+  });
+});
+
 describe('crop', () => {
   it('accepts a valid crop box and puts crop first in the filter chain', () => {
     const s = normalizeSettings({ format: 'webp', crop: { x: 10, y: 20, width: 640, height: 360 } });

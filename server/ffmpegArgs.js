@@ -54,6 +54,9 @@ function scaleFilter(settings) {
   // x264 + yuv420p requires even dimensions, so mp4 gets -2 (round height to even)
   const h = format === 'mp4' ? -2 : -1;
   parts.push(`fps=${fps}`, `scale=${width}:${h}:flags=lanczos`);
+  // reverse last: the filter buffers every frame, so run it on the already
+  // decimated + downscaled frames to keep memory down.
+  if (settings.reverse) parts.push('reverse');
   return parts.join(',');
 }
 
@@ -171,6 +174,7 @@ export function normalizeSettings(raw) {
       s.videoBitrate = clampInt(raw.videoBitrate, 50_000, 50_000_000, 0) || null;
     }
   }
+  s.reverse = raw.reverse === true;
   s.probe = raw.probe === true; // probe conversions skip the output-folder save
   return s;
 }
